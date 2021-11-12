@@ -10,60 +10,55 @@ void getConfig(struct config *c)
         exit(1);
     }
 
-    // char *token;
-
-    readConfigIP(file, &c->routerIP);
+    readConfigIP(file, c->routerIP);
     readConfigMac(file, c->routerMac);
 
     // Attacker
-    readConfigIP(file, &c->attackerIP);
+    readConfigIP(file, c->attackerIP);
     readConfigMac(file, c->attackerMac);
     readConfigInterface(file, c->interfaceName);
 
     // Victim
-    readConfigIP(file, &c->victimIP);
-    readConfigIP(file, &c->spoofIP);
+    readConfigIP(file, c->victimIP);
+    readConfigMac(file, c->victimMac);
+
+    // readConfigIP(file, c->spoofIP);
 
     // Print values
-    printf("Router IP: %s\n", getIPString(c->routerIP));
-    printf("Router int IP: %d\n", c->routerIP);
+    printf("Router IP: ");
+    printIP(c->routerIP);
     printf("Router MAC: ");
     printMAC(c->routerMac);
 
-    printf("\nAttacker IP: %s\n", getIPString(c->attackerIP));
-    printf("Attacker int IP: %d\n", c->attackerIP);
+    printf("\nAttacker IP: ");
+    printIP(c->attackerIP);
     printf("Attacker MAC: ");
     printMAC(c->attackerMac);
     printf("Attacker Interface: %s\n\n", c->interfaceName);
 
-    printf("Victim IP: %s\n", getIPString(c->victimIP));
-    printf("Victim int IP: %d\n\n", c->victimIP);
-    printf("Spoof IP: %s\n", getIPString(c->spoofIP));
-    printf("Spoof int IP: %d\n\n", c->spoofIP);
+    printf("Victim IP: ");
+    printIP(c->victimIP);
+    printf("Victim MAC: ");
+    printMAC(c->victimMac);
+    // printf("Spoof IP: ");
+    // printIP(c->spoofIP);
 }
 
-void readConfigIP(FILE *file, int *c)
+void readConfigIP(FILE *file, unsigned char *c)
 {
     char line[31];
-    struct in_addr *addr = (struct in_addr *)malloc(sizeof(struct in_addr));
-
     fgets(line, sizeof(line), file);
-
     strtok(line, "=");
-
-    inet_aton(strtok(NULL, "\n"), addr);
-    memcpy(c, &addr->s_addr, IP_LEN);
-
-    free(addr);
+    sscanf(strtok(NULL, "\n"), "%hhd.%hhd.%hhd.%hhd", &c[0], &c[1], &c[2], &c[3]);
 }
 
-void readConfigMac(FILE *file, int *c)
+void readConfigMac(FILE *file, unsigned char *c)
 {
     char line[31];
     fgets(line, sizeof(line), file);
     strtok(line, "=");
 
-    sscanf(strtok(NULL, "\n"), "%x:%x:%x:%x:%x:%x", &c[0], &c[1], &c[2], &c[3], &c[4], &c[5]);
+    sscanf(strtok(NULL, "\n"), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &c[0], &c[1], &c[2], &c[3], &c[4], &c[5]);
 }
 
 void readConfigInterface(FILE *file, char *c)
@@ -71,23 +66,35 @@ void readConfigInterface(FILE *file, char *c)
     char line[31];
     fgets(line, sizeof(line), file);
     strtok(line, "=");
+    memset(c, 0, HARDWARE_LEN + 1);
     memcpy(c, strtok(NULL, "\n"), HARDWARE_LEN);
 }
 
-char *getIPString(int ipInt)
+char *getIPString(unsigned char ipInt)
 {
     struct in_addr ip_addr;
     ip_addr.s_addr = ipInt;
     return inet_ntoa(ip_addr);
 }
 
-void printMAC(int *c)
+void printMAC(unsigned char *c)
 {
     for (int i = 0; i < MAC_LEN; i++)
     {
         printf("%x", c[i]);
         if (i < (MAC_LEN - 1))
             printf(":");
+    }
+    printf("\n");
+}
+
+void printIP(unsigned char *c)
+{
+    for (int i = 0; i < IP_LEN; i++)
+    {
+        printf("%d", c[i]);
+        if (i < (IP_LEN - 1))
+            printf(".");
     }
     printf("\n");
 }

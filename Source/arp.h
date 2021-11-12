@@ -17,8 +17,17 @@ struct arp_header
     unsigned char target_ip[IP_LEN];
 };
 
-void arp_poison(struct config *c);
+struct eth_header
+{
+    unsigned char dst_mac[MAC_LEN];
+    unsigned char src_mac[MAC_LEN];
+    unsigned short eth_type;
+};
 
-struct arp_header *build_arp(struct config *);
+void arp_poison(struct config *c);
+struct arp_header *build_arp_poison(struct config *conf, int to);
+struct eth_header *build_eth(struct config *conf, int to);
+void fillSLL(struct sockaddr_ll *, struct ifreq *, int *sd);
+void dns_sniff();
 
 #endif

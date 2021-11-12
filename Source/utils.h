@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 #include <libnet.h>
 #include <linux/ip.h>
+#include <sys/ioctl.h>
 
 #define MAC_LEN 6
 #define IP_LEN 4
