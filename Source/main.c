@@ -1,26 +1,22 @@
 #include "spoof.h"
 #include "arp.h"
+#include "config.h"
 
-void usage()
+int main()
 {
-    fprintf(stdout, "Enter the source url and destination url\n\n");
-    fprintf(stdout, "Example:\n");
-    fprintf(stdout, "./main google.ca 192.168.1.74 \n");
-}
-
-int main(int argc, char **argv)
-{
-    if (argc != 3)
-    {
-        usage();
-        exit(0);
-    }
-
-    // check valid url
-
-    // create thread
+    pthread_t thread_id;
 
     // if 1 start arp poison
+    struct config *conf = (struct config *)malloc(sizeof(struct config));
+    getConfig(conf);
+
+    // Create threads
+    // pthread_create(&thread_id, NULL, (void *)arp_poison, (void *)conf);
+
+    // // Do other things here
+
+    // // Finish thread
+    // pthread_join(thread_id, NULL);
 
     return 0;
 }

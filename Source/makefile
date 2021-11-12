@@ -4,11 +4,11 @@ CLIB = -lpthread -lrt
 
 all: main 
 
-main: main.o spoof.o arp.o
-	$(CC) -o main main.o spoof.o arp.o $(SSL)
+main: main.o spoof.o arp.o config.o
+	$(CC) -o main main.o spoof.o arp.o config.o $(CLIB)
 
 clean:
-	rm -f *.o main spoof arp 
+	rm -f *.o main spoof arp config
 	
 
 main.o:
@@ -19,3 +19,6 @@ spoof.o:
 
 arp.o:
 	$(CC) -c arp.c 
+
+config.o:
+	$(CC) -c config.c 
