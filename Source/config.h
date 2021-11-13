@@ -5,16 +5,6 @@
 
 struct config
 {
-    // int routerIP;
-    // int routerMac[MAC_LEN];
-
-    // int attackerIP;
-    // int attackerMac[MAC_LEN];
-    // char interfaceName[HARDWARE_LEN];
-
-    // int victimIP;
-    // int spoofIP;
-
     unsigned char routerIP[IP_LEN];
     unsigned char routerMac[MAC_LEN];
 
@@ -25,6 +15,8 @@ struct config
     unsigned char victimIP[IP_LEN];
     unsigned char victimMac[MAC_LEN];
     unsigned char spoofIP[IP_LEN];
+
+    int socket;
 };
 
 void getConfig(struct config *);

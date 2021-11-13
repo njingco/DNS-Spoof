@@ -1,14 +1,15 @@
 
 CC=gcc -Wall -g
 CLIB = -lpthread -lrt
+CPCAP = -lpcap
 
 all: main 
 
-main: main.o spoof.o arp.o config.o
-	$(CC) -o main main.o spoof.o arp.o config.o $(CLIB)
+main: main.o spoof.o arp.o config.o dns.o
+	$(CC) -o main main.o spoof.o arp.o config.o dns.o $(CLIB) $(CPCAP)
 
 clean:
-	rm -f *.o main spoof arp config
+	rm -f *.o main spoof arp config dns
 	
 
 main.o:
@@ -22,3 +23,6 @@ arp.o:
 
 config.o:
 	$(CC) -c config.c 
+
+dns.o:
+	$(CC) -c dns.c 

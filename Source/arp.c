@@ -121,7 +121,3 @@ void fillSLL(struct sockaddr_ll *sll, struct ifreq *ifr, int *sd)
     memset(sll->sll_addr + 6, 0, 2);
     sll->sll_halen = ETH_ALEN;
 }
-
-void dns_sniff(struct config *c)
-{
-}

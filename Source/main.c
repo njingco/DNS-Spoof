@@ -14,18 +14,19 @@
 
 int main()
 {
-    pthread_t thread_id;
+    // pthread_t thread_id;
 
     struct config *conf = (struct config *)malloc(sizeof(struct config));
     getConfig(conf);
 
     // Create threads
-    pthread_create(&thread_id, NULL, (void *)arp_poison, (void *)conf);
+    // pthread_create(&thread_id, NULL, (void *)arp_poison, (void *)conf);
 
     // // Do other things here
+    dns_sniff(conf);
 
     // // Finish thread
-    pthread_join(thread_id, NULL);
+    // pthread_join(thread_id, NULL);
 
     return 0;
 }

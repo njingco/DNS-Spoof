@@ -14,12 +14,14 @@
 #include <netdb.h>
 #include <net/ethernet.h>
 #include <netinet/in.h>
+#include <netinet/udp.h>
 #include <netpacket/packet.h>
 #include <netinet/if_ether.h>
 #include <netinet/in.h>
 #include <libnet.h>
 #include <linux/ip.h>
 #include <sys/ioctl.h>
+#include <pcap/pcap.h>
 
 #define MAC_LEN 6
 #define IP_LEN 4
