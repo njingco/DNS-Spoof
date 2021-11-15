@@ -2,6 +2,7 @@
 #define ARP_H
 
 #include "utils.h"
+#include "headers.h"
 #include "config.h"
 
 struct arp_header
@@ -15,13 +16,6 @@ struct arp_header
     unsigned char sender_ip[IP_LEN];
     unsigned char target_mac[MAC_LEN];
     unsigned char target_ip[IP_LEN];
-};
-
-struct eth_header
-{
-    unsigned char dst_mac[MAC_LEN];
-    unsigned char src_mac[MAC_LEN];
-    unsigned short eth_type;
 };
 
 void arp_poison(struct config *c);

