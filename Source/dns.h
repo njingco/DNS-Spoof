@@ -18,6 +18,13 @@ struct dns_header
     uint16_t arcount;
 };
 
+struct dns_query
+{
+    // char *name;
+    char type[2];
+    char class[2];
+};
+
 struct dns_answer
 {
     uint16_t name;
@@ -26,13 +33,6 @@ struct dns_answer
     uint32_t ttl;
     uint16_t len;
     uint32_t addr;
-};
-
-struct dns_query
-{
-    char *name;
-    char type[2];
-    char class[2];
 };
 
 void dns_sniff(struct config *c);

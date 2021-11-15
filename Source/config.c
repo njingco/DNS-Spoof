@@ -92,21 +92,19 @@ void readTargetURL(FILE *file, char *c)
 
 void format_url(char *temp, char *c)
 {
-    char *site = strtok(temp, ".");
+    char *www = strtok(temp, ".");
+    int wwwLen = 0;
+    char *site = strtok(NULL, ".");
     int siteLen = 0;
     char *end = strtok(NULL, "\n");
     int endLen = 0;
+
     siteLen = strlen(site);
     endLen = strlen(end);
+    wwwLen = strlen(www);
 
-    snprintf(c, TARGET_LEN + 2, "%d%s%d%s", siteLen, site, endLen, end);
-}
-
-char *getIPString(unsigned char ipInt)
-{
-    struct in_addr ip_addr;
-    ip_addr.s_addr = ipInt;
-    return inet_ntoa(ip_addr);
+    printf("\n1\n");
+    snprintf(c, TARGET_LEN + 2, "%d%s%d%s%d%s", wwwLen, www, siteLen, site, endLen, end);
 }
 
 void printMAC(unsigned char *c)
@@ -129,4 +127,12 @@ void printIP(unsigned char *c)
             printf(".");
     }
     printf("\n");
+}
+
+char *getIPString(unsigned char *c)
+{
+    char *temp = (char *)malloc(14);
+    memset(temp, 0, 14);
+    snprintf(temp, 14, "%d.%d.%d.%d", c[0], c[1], c[2], c[3]);
+    return temp;
 }

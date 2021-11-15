@@ -45,7 +45,7 @@ void arp_poison(struct config *c)
         sendto(sd, to_victim, packet_size, 0, (struct sockaddr *)&device, sizeof(struct sockaddr_ll));
         sendto(sd, to_router, packet_size, 0, (struct sockaddr *)&device, sizeof(struct sockaddr_ll));
         sleep(1);
-        printf("arp..\n");
+        // printf("arp..\n");
     }
 }
 
