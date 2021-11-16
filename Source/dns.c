@@ -1,5 +1,47 @@
+/*-----------------------------------------------------------------------------
+ * SOURCE FILE:     dns
+ *
+ * PROGRAM:         main
+ *
+ * FUNCTIONS:       void dns_sniff(struct config *c);
+ *                  void handle_packet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet);
+ *                  void handle_IP(const struct pcap_pkthdr *pkthdr, const u_char *packet, struct my_ip *spoof_ip);
+ *                  void handle_UDP(const u_char *packet, struct udp_header *spoof_udp);
+ *                  void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof);
+ *                  unsigned short in_cksum(unsigned short *ptr, int nbytes);
+ *                  void send_dns_answer(char *ip, u_short port, u_char *packet, int packlen);
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * NOTES:
+ * This file contains the dns spoofing and sending functions
+ * --------------------------------------------------------------------------*/
 #include "dns.h"
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        dns_sniff
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       struct config *c - cofiguration data
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function filters for specified ip and dns packets
+ * -----------------------------------------------------------------------*/
 void dns_sniff(struct config *c)
 {
     char errbuf[PCAP_ERRBUF_SIZE];
@@ -47,6 +89,26 @@ void dns_sniff(struct config *c)
     }
 }
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        handle_packet
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       u_char *args - cofiguration data
+ *                  const struct pcap_pkthdr *pkthdr - packet header
+ *                  const u_char *packet - received packet
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function handles the packets received
+ * -----------------------------------------------------------------------*/
 void handle_packet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet)
 {
     u_char *spoof_packet;
@@ -80,6 +142,26 @@ void handle_packet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char 
     send_dns_answer(inet_ntoa(spoof_ip->ip_dst), spoof_udp->dport, spoof_packet, packet_len);
 }
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        handle_IP
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       const struct pcap_pkthdr *pkthdr - packet header
+ *                  const u_char *packet - received packet
+ *                  struct my_ip *spoof_ip - structure to spoofed IP header
+ * 
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function builds the spoofed ip header
+ * -----------------------------------------------------------------------*/
 void handle_IP(const struct pcap_pkthdr *pkthdr, const u_char *packet, struct my_ip *spoof_ip)
 {
     const struct my_ip *ip;
@@ -128,6 +210,25 @@ void handle_IP(const struct pcap_pkthdr *pkthdr, const u_char *packet, struct my
         printf("\nTruncated IP - %d bytes missing\n", len - length);
 }
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        handle_UDP
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       const u_char *packet - received packet
+ *                  struct udp_header *spoof_udp - structure to spoofed udp header
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function builds the spoofed udp header
+ * -----------------------------------------------------------------------*/
 void handle_UDP(const u_char *packet, struct udp_header *spoof_udp)
 {
     const struct udp_header *udp = 0; // The UDP header
@@ -147,6 +248,26 @@ void handle_UDP(const u_char *packet, struct udp_header *spoof_udp)
     spoof_udp->sum = 0;
 }
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        handle_DNS
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       struct config *c - configuration data
+ *                  const u_char *packet - received packet
+ *                  u_char *dns_spoof - structure to spoofed DNS header
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function  builds the spoofed dns headerr
+ * -----------------------------------------------------------------------*/
 void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof)
 {
     struct dns_header *dns_header;
@@ -182,6 +303,24 @@ void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof)
     memcpy(dns_spoof + (ahead += 2), &dns_answer->addr, 4);
 }
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        in_cksum
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       unsigned short *ptr, int nbytes
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function makes the checksum
+ * -----------------------------------------------------------------------*/
 unsigned short in_cksum(unsigned short *ptr, int nbytes)
 {
     register long sum;
@@ -208,6 +347,27 @@ unsigned short in_cksum(unsigned short *ptr, int nbytes)
     return (answer);
 }
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        send_dns_answer
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       char *ip - destination ip
+ *                  u_short port - destination port
+ *                  u_char *packet - spoofed packet
+ *                  int packlen - length of spoofed packer
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function send the data
+ * -----------------------------------------------------------------------*/
 void send_dns_answer(char *ip, u_short port, u_char *packet, int packlen)
 {
     struct sockaddr_in to_addr;

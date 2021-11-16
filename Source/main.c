@@ -1,19 +1,52 @@
-
-/**
+/*-----------------------------------------------------------------------------
+ * SOURCE FILE:     main
+ *
+ * PROGRAM:         main
+ *
+ * FUNCTIONS:       int main()
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * NOTES:
+ * This file contains the 
+ * 
  * Compile:
  * make
  * 
- * Usage:
+ * Before running:
  * echo 1 >> /proc/sys/net/ipv4/ip_forward
- * iptables -P FORWARD DROP
- * iptables -L -n -v
  * 
+ * Run:
  * ./main
- */
-
+ * --------------------------------------------------------------------------*/
 #include "arp.h"
+#include "dns.h"
 #include "config.h"
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        main
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       N/A
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function is the main function that runs the program
+ * -----------------------------------------------------------------------*/
 int main()
 {
     pthread_t thread_id;

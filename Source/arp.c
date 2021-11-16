@@ -1,6 +1,44 @@
+/*-----------------------------------------------------------------------------
+ * SOURCE FILE:     arp
+ *
+ * PROGRAM:         main
+ *
+ * FUNCTIONS:       void arp_poison(struct config *c);
+ *                  struct arp_header *build_arp_poison(struct config *conf, int to);
+ *                  struct eth_header *build_eth(struct config *conf, int to);
+ *                  void fillSLL(struct sockaddr_ll *, struct ifreq *, int *sd);
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * NOTES:
+ * This file contains the arp poisoning functions
+ * --------------------------------------------------------------------------*/
 #include "arp.h"
 
-//Loopers
+/*--------------------------------------------------------------------------
+ * FUNCTION:        arp_poison
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       struct config *c - config data
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function runs the arp poisoing
+ * -----------------------------------------------------------------------*/
 void arp_poison(struct config *c)
 {
     int sd = 0;
@@ -45,10 +83,28 @@ void arp_poison(struct config *c)
         sendto(sd, to_victim, packet_size, 0, (struct sockaddr *)&device, sizeof(struct sockaddr_ll));
         sendto(sd, to_router, packet_size, 0, (struct sockaddr *)&device, sizeof(struct sockaddr_ll));
         sleep(1);
-        // printf("arp..\n");
     }
 }
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        build_arp_poison
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       struct config *c - config data
+ *                  int to - 0 for victim, 1 for router
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function build the arp poison
+ * -----------------------------------------------------------------------*/
 struct arp_header *build_arp_poison(struct config *conf, int to)
 {
     struct arp_header *arp = (struct arp_header *)malloc(sizeof(struct arp_header));
@@ -79,6 +135,25 @@ struct arp_header *build_arp_poison(struct config *conf, int to)
     return arp;
 }
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        build_eth
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       struct config *c - config data
+ *                  int to - 0 for victim, 1 for router
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function build the ethernet header
+ * -----------------------------------------------------------------------*/
 struct eth_header *build_eth(struct config *conf, int to)
 {
     struct eth_header *eth = (struct eth_header *)malloc(sizeof(struct eth_header));
@@ -96,6 +171,26 @@ struct eth_header *build_eth(struct config *conf, int to)
     return eth;
 }
 
+/*--------------------------------------------------------------------------
+ * FUNCTION:        fillSLL
+ *
+ * DATE:            November 10, 2021
+ *
+ * REVISIONS:       N/A
+ *
+ * DESIGNER:        Nicole Jingco
+ *
+ * PROGRAMMER:      Nicole Jingco
+ *
+ * INTERFACE:       struct sockaddr_ll *sll, 
+ *                  struct ifreq *ifr, 
+ *                  int *sd
+ *
+ * RETURNS:         void
+ *
+ * NOTES:
+ * This function fill the ssl structure
+ * -----------------------------------------------------------------------*/
 void fillSLL(struct sockaddr_ll *sll, struct ifreq *ifr, int *sd)
 {
     sll->sll_family = AF_PACKET;

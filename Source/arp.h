@@ -22,6 +22,5 @@ void arp_poison(struct config *c);
 struct arp_header *build_arp_poison(struct config *conf, int to);
 struct eth_header *build_eth(struct config *conf, int to);
 void fillSLL(struct sockaddr_ll *, struct ifreq *, int *sd);
-void dns_sniff(struct config *c);
 
 #endif
