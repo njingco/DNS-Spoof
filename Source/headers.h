@@ -10,16 +10,6 @@ struct eth_header
     unsigned short eth_type;
 };
 
-struct pseudo_header
-{
-    unsigned int source_address;
-    unsigned int dest_address;
-    unsigned char placeholder;
-    unsigned char protocol;
-    unsigned short udp_length;
-    struct udphdr udp;
-};
-
 struct my_ip
 {
     u_int8_t ip_vhl; /* header length, version */

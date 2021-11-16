@@ -92,19 +92,19 @@ void readTargetURL(FILE *file, char *c)
 
 void format_url(char *temp, char *c)
 {
-    char *www = strtok(temp, ".");
-    int wwwLen = 0;
-    char *site = strtok(NULL, ".");
+    // char *www = strtok(temp, ".");
+    // int wwwLen = 0;
+    char *site = strtok(temp, ".");
     int siteLen = 0;
     char *end = strtok(NULL, "\n");
     int endLen = 0;
 
     siteLen = strlen(site);
     endLen = strlen(end);
-    wwwLen = strlen(www);
+    // wwwLen = strlen(www);
 
-    printf("\n1\n");
-    snprintf(c, TARGET_LEN + 2, "%d%s%d%s%d%s", wwwLen, www, siteLen, site, endLen, end);
+    // snprintf(c, TARGET_LEN + 2, "%d%s%d%s%d%s", wwwLen, www, siteLen, site, endLen, end);
+    snprintf(c, TARGET_LEN + 2, "%d%s%d%s", siteLen, site, endLen, end);
 }
 
 void printMAC(unsigned char *c)

